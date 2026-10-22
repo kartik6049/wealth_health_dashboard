@@ -182,6 +182,37 @@ h1 { font-size:18px; font-weight:600; letter-spacing:-.015em; }
 table { font-size:13px; }
 td { font-weight:450; }
 .tip b { font-weight:600; }
+  /*Mobile refinements*/
+@media (max-width:760px) {
+  aside { display:grid; grid-template-columns:1fr auto; align-items:center; gap:14px 16px; padding:18px 20px; }
+  aside .nav, aside > div:nth-child(4) { display:none; }
+  aside > div:nth-child(3) { grid-column:1 / -1; }
+  #filters { display:flex; flex-wrap:wrap; gap:4px 16px; }
+  .filter { width:auto; padding:4px 0; }
+  .filter span { display:none; }
+  .topbar { padding:20px 20px 14px; gap:16px; }
+  h1 { font-size:17px; }
+  .playback { width:100%; justify-content:space-between; gap:12px; }
+  .year { font-size:34px; }
+  .scrubber { padding:4px 20px 10px; }
+  .kpi { padding:16px 16px 18px; }
+  .kpi:first-child { padding-left:20px; }
+  .kpi .big { font-size:24px; }
+  .stage > .panel:first-child { height:400px; }
+  .panel-head, .stage > .panel:first-child .panel-head { padding:16px 20px 0; }
+  .bubble-body { margin:4px; }
+  .table-head { padding:20px 20px 10px; flex-wrap:wrap; }
+  #search { width:100%; }
+  th:nth-child(3), td:nth-child(3), th:nth-child(8), td:nth-child(8) { display:none; }
+  th, td { padding-left:10px; padding-right:10px; }
+  th:first-child, td:first-child { padding-left:20px; }
+}
+@media (pointer:coarse) {
+  #scrub { height:28px; }
+  #scrub::-webkit-slider-thumb { width:18px; height:18px; margin-top:-8.5px; }
+  #scrub::-moz-range-thumb { width:18px; height:18px; }
+  .tbtn { width:40px; height:40px; }
+}
 </style>
 </head>
 <body>
@@ -511,9 +542,10 @@ function BubbleChart(wrap) {
       ctx.fillText(v, m.l - 10, py);
     }
     ctx.textBaseline = 'bottom';
-    ctx.textAlign = 'left';  ctx.fillText('LIFE EXPECTANCY · YRS', m.l, m.t - 12);
-    ctx.textAlign = 'right'; ctx.fillText('GDP PER CAPITA · LOG SCALE →', w - m.r, m.t - 12);
-
+    const narrow = w < 560;
+    ctx.textAlign = 'left';  ctx.fillText(narrow ? 'LIFE EXP. · YRS' : 'LIFE EXPECTANCY · YRS', m.l, m.t - 12);
+    ctx.textAlign = 'right'; ctx.fillText(narrow ? 'GDP / CAPITA →' : 'GDP PER CAPITA · LOG SCALE →', w - m.r, m.t - 12);
+    
     // Traced paths
     for (const n of s.traced) {
       const c = BY_NAME.get(n);
