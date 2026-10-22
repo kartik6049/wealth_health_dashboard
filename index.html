@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lifelines — Wealth &amp; Health of Nations, 1952–2007</title>
+<meta name="description" content="Animated dashboard of income, life expectancy and population for 142 countries, built with D3.js, HTML Canvas, CanvasJS and Google Charts.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.canvasjs.com/canvasjs.min.js"></script>
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+<style>
+  :root {
+    --ink:#0D0E11; --g1:#16181D; --g2:#23262D; --g3:#3A3E47; --g4:#6B707A; --g5:#A3A7AF;
+    --text:#F4F4F2; --accent:#FF4F00;
+    --sans:'Inter', system-ui, sans-serif;
+    --mono:'JetBrains Mono', ui-monospace, monospace;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; overflow:hidden; background:var(--ink); color:var(--text); font-family:var(--sans);
+       font-feature-settings:'cv11','ss01','tnum'; -webkit-font-smoothing:antialiased; }
+  ::selection { background:var(--accent); color:var(--ink); }
+  :focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
+  button { font:inherit; }
+  .app { display:grid; grid-template-columns:232px minmax(0,1fr); height:100vh; }
+  .label { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--g4); }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  /* Sidebar */
+  aside { border-right:1px solid var(--g2); padding:32px 20px 24px 28px; display:flex; flex-direction:column; gap:36px; overflow-y:auto; }
+  .brand { font-weight:700; font-size:17px; letter-spacing:-.02em; }
+  .brand span { color:var(--accent); }
+  .nav a { display:block; padding:7px 0 7px 14px; color:var(--g4); text-decoration:none; font-size:13px; border-left:1px solid var(--g2); transition:color .15s, border-color .15s; }
+  .nav a:hover { color:var(--text); }
+  .nav a.active { color:var(--text); border-left-color:var(--accent); }
+  .side-label { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; }
+  .linkbtn { background:none; border:none; padding:0; cursor:pointer; color:var(--g4); font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+  .linkbtn:hover { color:var(--text); }
+  .filter { display:flex; align-items:center; gap:10px; width:100%; background:none; border:none; padding:6px 0; cursor:pointer; color:var(--g4); font-size:13px; text-align:left; transition:color .15s; }
+  .filter i { width:8px; height:8px; border:1px solid var(--sw); flex:none; }
+  .filter.on { color:var(--text); }
+  .filter.on i { background:var(--sw); }
+  .filter span { margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--g4); }
+  #watchlist { list-style:none; margin:0; padding:0; }
+  #watchlist li { display:flex; align-items:center; gap:8px; padding:7px 0; font-size:13px; border-bottom:1px solid var(--g1); cursor:default; }
+  #watchlist li i { width:5px; height:5px; background:var(--accent); flex:none; }
+  #watchlist .wname { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #watchlist .mono { margin-left:auto; font-size:11px; color:var(--g5); }
+  #watchlist button { opacity:0; background:none; border:none; color:var(--g4); cursor:pointer; font-size:14px; padding:0 0 0 2px; transition:opacity .15s; }
+  #watchlist li:hover button { opacity:1; }
+  #watchlist button:hover { color:var(--accent); }
+  #watchlist .empty { color:var(--g4); font-size:12px; border:none; }
+  .side-foot { margin-top:auto; font-size:11px; color:var(--g4); line-height:2.1; }
+  kbd { font-family:var(--mono); font-size:10px; border:1px solid var(--g3); padding:1px 5px; margin-right:4px; color:var(--g5); }
+
+  /* Main layout */
+  main { overflow-y:auto; min-width:0; }
+  main::-webkit-scrollbar { width:8px; } main::-webkit-scrollbar-thumb { background:var(--g2); }
+  .topbar { display:flex; justify-content:space-between; align-items:flex-end; gap:32px; padding:32px 32px 20px 48px; }
+  h1 { margin:8px 0 0; font-size:22px; font-weight:600; letter-spacing:-.02em; }
+  .playback { display:flex; align-items:center; gap:22px; }
+  .year { font-size:46px; font-weight:700; letter-spacing:-.04em; line-height:1; font-variant-numeric:tabular-nums; min-width:3ch; }
+  .transport { display:flex; gap:6px; }
+  .tbtn { width:34px; height:34px; display:grid; place-items:center; background:none; border:1px solid var(--g3); color:var(--g5); cursor:pointer; transition:border-color .15s, color .15s; }
+  .tbtn:hover { border-color:var(--text); color:var(--text); }
+  .tbtn:active { transform:translateY(1px); }
+  .tbtn.play { background:var(--accent); border-color:var(--accent); color:var(--ink); }
+  .speeds { display:flex; gap:2px; }
+  .speeds button { background:none; border:none; padding:4px 6px; cursor:pointer; font-family:var(--mono); font-size:11px; color:var(--g4); }
+  .speeds button:hover { color:var(--text); }
+  .speeds button.on { color:var(--accent); }
+
+  .scrubber { padding:4px 32px 12px 48px; border-bottom:1px solid var(--g2); }
+  #scrub { -webkit-appearance:none; appearance:none; width:100%; height:16px; margin:0; background:transparent; cursor:pointer; }
+  #scrub::-webkit-slider-runnable-track { height:1px; background:linear-gradient(to right, var(--accent) var(--p,0%), var(--g3) var(--p,0%)); }
+  #scrub::-webkit-slider-thumb { -webkit-appearance:none; width:10px; height:10px; margin-top:-4.5px; background:var(--accent); border:none; border-radius:0; }
+  #scrub::-moz-range-track { height:1px; background:var(--g3); }
+  #scrub::-moz-range-progress { height:1px; background:var(--accent); }
+  #scrub::-moz-range-thumb { width:10px; height:10px; background:var(--accent); border:none; border-radius:0; }
+  .ticks { display:flex; justify-content:space-between; margin-top:2px; font-family:var(--mono); font-size:10px; color:var(--g4); }
+
+  .kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border-bottom:1px solid var(--g2); }
+  .kpi { padding:22px 24px 24px; min-width:0; }
+  .kpi:first-child { padding-left:48px; }
+  .kpi + .kpi { border-left:1px solid var(--g2); }
+  .kpi .big { font-size:30px; font-weight:600; letter-spacing:-.03em; margin:10px 0 6px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .kpi .big small { font-size:13px; font-weight:500; color:var(--g4); margin-left:5px; letter-spacing:0; }
+  .kpi .delta { font-family:var(--mono); font-size:11px; color:var(--g4); }
+  .kpi .delta.neg { color:var(--accent); }
+
+  .stage { display:grid; grid-template-columns:minmax(0,1fr) 380px; height:clamp(480px,64vh,760px); border-bottom:1px solid var(--g2); }
+  .panel { display:flex; flex-direction:column; min-width:0; min-height:0; }
+  .panel-head { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px 16px; padding:20px 24px 0; }
+  .stage > .panel:first-child .panel-head { padding-left:48px; }
+  .panel-body { flex:1; min-height:0; position:relative; }
+  .bubble-body { margin:4px 8px 8px 16px; }
+  .bubble-body canvas { position:absolute; inset:0; }
+  .side { border-left:1px solid var(--g2); display:grid; grid-template-rows:1fr 1fr; min-height:0; }
+  .side .panel + .panel { border-top:1px solid var(--g2); }
+  .side .panel-body { margin:10px 16px 12px; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 14px; font-family:var(--mono); font-size:10px; color:var(--g4); }
+  .legend i { display:inline-block; width:7px; height:7px; margin-right:5px; }
+  .tip { position:absolute; display:none; pointer-events:none; z-index:2; min-width:180px; background:var(--ink); border:1px solid var(--g3); padding:10px 12px; font-size:13px; }
+  .tip .row { display:flex; justify-content:space-between; gap:16px; margin-top:4px; font-family:var(--mono); font-size:11px; color:var(--g5); }
+  .tip .hint { margin-top:8px; font-family:var(--mono); font-size:10px; color:var(--g4); }
+  .loading { position:absolute; inset:0; display:grid; place-items:center; }
+
+  /* Country table */
+  .table-head { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:24px 32px 12px 48px; }
+  #search { background:transparent; border:none; border-bottom:1px solid var(--g2); color:var(--text); font-family:var(--mono); font-size:12px; padding:6px 0; width:220px; outline:none; transition:border-color .15s; }
+  #search:focus { border-color:var(--g4); }
+  #search::placeholder { color:var(--g4); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { position:sticky; top:0; z-index:1; background:var(--ink); text-align:left; white-space:nowrap; padding:10px 16px; border-bottom:1px solid var(--g2);
+       font-family:var(--mono); font-size:10px; font-weight:400; letter-spacing:.1em; text-transform:uppercase; color:var(--g4); user-select:none; }
+  th[data-sort] { cursor:pointer; }
+  th[data-sort]:hover, th.sorted { color:var(--text); }
+  td { padding:9px 16px; border-bottom:1px solid var(--g1); white-space:nowrap; }
+  th:first-child, td:first-child { padding-left:48px; }
+  th:last-child, td:last-child { padding-right:32px; }
+  .num { text-align:right; }
+  td.num { font-family:var(--mono); font-size:12px; font-variant-numeric:tabular-nums; }
+  td.dim { color:var(--g4); }
+  td.neg { color:var(--accent); }
+  tbody tr { transition:background .1s; }
+  tbody tr:hover, tbody tr.hl { background:var(--g1); }
+  tbody tr.pinned td:first-child { box-shadow:inset 2px 0 0 var(--accent); }
+  td svg { display:block; overflow:visible; }
+  .badge { display:inline-block; font-family:var(--mono); font-size:10px; letter-spacing:.04em; padding:2px 6px; border:1px solid var(--g3); color:var(--g5); }
+  .badge.high { color:var(--text); border-color:var(--g4); }
+  .badge.low { color:var(--accent); border-color:var(--accent); }
+  .actions { display:flex; justify-content:flex-end; gap:6px; opacity:0; transition:opacity .15s; }
+  tr:hover .actions, tr:focus-within .actions { opacity:1; }
+  .act { background:none; border:1px solid var(--g3); color:var(--g5); cursor:pointer; padding:3px 8px; font-family:var(--mono); font-size:10px; transition:border-color .15s, color .15s; }
+  .act:hover { border-color:var(--text); color:var(--text); }
+  .act.on { border-color:var(--accent); color:var(--accent); }
+  td.empty { padding:32px 48px; color:var(--g4); }
+
+  .sources { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:32px; padding:32px 32px 48px 48px; border-top:1px solid var(--g2); font-size:12px; line-height:1.7; color:var(--g4); }
+  .sources p { margin:10px 0 0; }
+  .sources a { color:var(--g5); }
+
+  @media (hover:none) { .actions, #watchlist button { opacity:1; } }
+  @media (max-width:1100px) {
+    .stage { grid-template-columns:1fr; height:auto; }
+    .stage > .panel:first-child { height:480px; }
+    .side { border-left:none; border-top:1px solid var(--g2); grid-template-rows:none; grid-template-columns:1fr 1fr; }
+    .side .panel { height:320px; }
+    .side .panel + .panel { border-top:none; border-left:1px solid var(--g2); }
+  }
+  @media (max-width:760px) {
+    body { overflow:auto; height:auto; }
+    .app { display:block; height:auto; }
+    aside { border-right:none; border-bottom:1px solid var(--g2); padding:24px; gap:24px; }
+    .nav { display:flex; gap:4px; }
+    .side-foot { display:none; }
+    main { overflow:visible; }
+    .topbar { flex-direction:column; align-items:flex-start; padding:24px; }
+    .scrubber, .table-head { padding-left:24px; padding-right:24px; }
+    .ticks span:nth-child(even) { visibility:hidden; }
+    .kpis { grid-template-columns:1fr 1fr; }
+    .kpi:first-child { padding-left:24px; }
+    .kpi:nth-child(3) { border-left:none; }
+    .kpi:nth-child(n+3) { border-top:1px solid var(--g2); }
+    .stage > .panel:first-child { height:380px; }
+    .stage > .panel:first-child .panel-head { padding-left:24px; }
+    .side { grid-template-columns:1fr; }
+    .side .panel + .panel { border-left:none; border-top:1px solid var(--g2); }
+    .table-wrap { overflow-x:auto; }
+    th:first-child, td:first-child { padding-left:24px; }
+    .sources { grid-template-columns:1fr; padding:28px 24px 40px; }
+  }
+.brand { font-size:15px; font-weight:600; letter-spacing:-.01em; }
+h1 { font-size:18px; font-weight:600; letter-spacing:-.015em; }
+.year { font-size:40px; font-weight:600; letter-spacing:-.035em; }
+.kpi .big { font-size:28px; font-weight:500; letter-spacing:-.025em; }
+.kpi .big small { font-size:12px; font-weight:400; }
+.nav a, .filter, #watchlist li { font-size:13px; font-weight:500; }
+table { font-size:13px; }
+td { font-weight:450; }
+.tip b { font-weight:600; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside id="sidebar">
+    <div class="brand">Lifelines<span>.</span></div>
+    <nav class="nav">
+      <a href="#explorer">Explorer</a>
+      <a href="#countries">Countries</a>
+      <a href="#sources">Sources</a>
+    </nav>
+    <div>
+      <div class="side-label"><span class="label" title="Double-click a continent to isolate it">Continents</span><button class="linkbtn" id="resetFilters">All</button></div>
+      <div id="filters"></div>
+    </div>
+    <div>
+      <div class="side-label"><span class="label">Pinned</span><span class="label" id="pinCount"></span></div>
+      <ul id="watchlist"></ul>
+    </div>
+    <div class="side-foot"><kbd>Space</kbd>play / pause<br><kbd>←</kbd><kbd>→</kbd>step 5 years</div>
+  </aside>
+
+  <main id="main">
+    <header class="topbar">
+      <div>
+        <div class="label">Gapminder · 142 countries · 1952–2007</div>
+        <h1>Wealth &amp; Health of Nations</h1>
+      </div>
+      <div class="playback">
+        <div class="year" id="year">1952</div>
+        <div class="transport">
+          <button class="tbtn" id="prev" aria-label="Previous five years"><svg width="12" height="12" viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="1.5" height="9" fill="currentColor"/><path d="M10.5 1.5v9L4 6z" fill="currentColor"/></svg></button>
+          <button class="tbtn play" id="play" aria-label="Play"></button>
+          <button class="tbtn" id="next" aria-label="Next five years"><svg width="12" height="12" viewBox="0 0 12 12"><rect x="9" y="1.5" width="1.5" height="9" fill="currentColor"/><path d="M1.5 1.5v9L8 6z" fill="currentColor"/></svg></button>
+        </div>
+        <div class="speeds" id="speeds">
+          <button data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="scrubber">
+      <input type="range" id="scrub" min="1952" max="2007" step="0.01" value="1952" aria-label="Year">
+      <div class="ticks" id="ticks"></div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="label">Population</div><div class="big" id="k-pop">–</div><div class="delta" id="k-pop-d"></div></div>
+      <div class="kpi"><div class="label">Life expectancy</div><div class="big" id="k-life">–</div><div class="delta" id="k-life-d"></div></div>
+      <div class="kpi"><div class="label">Median GDP / capita</div><div class="big" id="k-gdp">–</div><div class="delta" id="k-gdp-d"></div></div>
+      <div class="kpi"><div class="label">Countries</div><div class="big" id="k-n">–</div><div class="delta" id="k-n-d"></div></div>
+    </div>
+
+    <section class="stage" id="explorer">
+      <div class="panel">
+        <div class="panel-head"><span class="label">Income vs. life expectancy</span><div class="legend" id="bubbleLegend"></div></div>
+        <div class="panel-body bubble-body" id="bubble">
+          <canvas></canvas><div class="tip"></div>
+          <div class="loading label" id="loading">Loading Gapminder data…</div>
+        </div>
+      </div>
+      <div class="side">
+        <div class="panel">
+          <div class="panel-head"><span class="label">Life expectancy by continent</span><span class="label">Pop-weighted</span></div>
+          <div class="panel-body" id="trend"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="label">Life expectancy map</span><span class="label" id="mapYear">1952</span></div>
+          <div class="panel-body" id="geo"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="countries">
+      <div class="table-head">
+        <span class="label">Countries · <span id="rowCount"></span></span>
+        <input id="search" type="search" placeholder="Filter countries…" autocomplete="off">
+      </div>
+      <div class="table-wrap"><table><thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody></table></div>
+    </section>
+
+    <footer class="sources" id="sources">
+      <div><span class="label">Data</span><p>Gapminder five-year dataset via Plotly's public datasets repository: 142 countries, 1952–2007. Values between snapshots are interpolated for smooth animation.</p></div>
+      <div><span class="label">Method</span><p>Continent, world and KPI averages are population-weighted. GDP per capita is inflation-adjusted US dollars on a log scale.</p></div>
+      <div><span class="label">Built with</span><p>D3.js scales on HTML Canvas, CanvasJS trend lines and Google Charts GeoChart. Made by Kartik.</p></div>
+    </footer>
+  </main>
+</div>
+
+<script>
+
+const T = { ink:'#0D0E11', g1:'#16181D', g2:'#23262D', g3:'#3A3E47', g4:'#6B707A', g5:'#A3A7AF', text:'#F4F4F2', accent:'#FF4F00' };
+const CONTINENTS = ['Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
+const SHADE = { Africa:'#8E939C', Americas:'#B9BCC2', Asia:'#6E737D', Europe:'#D9DBDF', Oceania:'#555A63' };
+const Y0 = 1952, Y1 = 2007, YEARS = d3.range(Y0, Y1 + 1, 5);
+const STORAGE_KEY = 'lifelines-v1';
+const ALL = new Set(['*']);
+const has = (ch, k) => ch.has('*') || ch.has(k);
+
+const $ = (s, r = document) => r.querySelector(s);
+const fmtUSD = d3.format('$,.0f');
+const fmtPop = v => v >= 1e9 ? (v / 1e9).toFixed(2) + 'B' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : Math.round(v / 1e3) + 'K';
+const popParts = v => v >= 1e9 ? [(v / 1e9).toFixed(2), 'B'] : [(v / 1e6).toFixed(1), 'M'];
+const escapeHTML = s => s.replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+function throttle(fn, ms) {
+  let last = 0, timer = null;
+  return () => {
+    const run = () => { last = performance.now(); timer = null; fn(); };
+    const wait = ms - (performance.now() - last);
+    if (wait <= 0 && !timer) run();
+    else if (!timer) timer = setTimeout(run, wait);
+  };
+}
+function debounce(fn, ms) { let t; return () => { clearTimeout(t); t = setTimeout(fn, ms); }; }
+const ICON = {
+  play:  '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 1.5v9l7.5-4.5z" fill="currentColor"/></svg>',
+  pause: '<svg width="12" height="12" viewBox="0 0 12 12"><rect x="2.5" y="1.5" width="2.5" height="9" fill="currentColor"/><rect x="7" y="1.5" width="2.5" height="9" fill="currentColor"/></svg>'
+};
+
+function createStore(initial) {
+  let state = initial;
+  const subs = new Set();
+  return {
+    get: () => state,
+    set(patch) {
+      const changed = Object.keys(patch).filter(k => !Object.is(patch[k], state[k]));
+      if (!changed.length) return;
+      state = { ...state, ...patch };
+      const ch = new Set(changed);
+      subs.forEach(fn => fn(state, ch));
+    },
+    subscribe(fn) { subs.add(fn); return () => subs.delete(fn); }
+  };
+}
+let store;
+function toggle(key, value) {
+  const next = new Set(store.get()[key]);
+  next.has(value) ? next.delete(value) : next.add(value);
+  store.set({ [key]: next });
+}
+function togglePlay() {
+  const s = store.get();
+  if (!s.playing && s.year >= Y1) store.set({ year: Y0, playing: true });
+  else store.set({ playing: !s.playing });
+}
+function step(dir) {
+  const k = (store.get().year - Y0) / 5;
+  const idx = dir > 0 ? Math.floor(k + 1e-6) + 1 : Math.ceil(k - 1e-6) - 1;
+  store.set({ playing: false, year: Math.max(Y0, Math.min(Y1, Y0 + idx * 5)) });
+}
+
+let COUNTRIES = [], BY_NAME = new Map(), BASE = [];
+const DATA_URLS = [
+  'https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv',
+  'https://cdn.jsdelivr.net/gh/plotly/datasets@master/gapminderDataFiveYear.csv'
+];
+async function loadData() {
+  for (const url of DATA_URLS) {
+    try { return await d3.csv(url, d3.autoType); } catch (e) { /* try next source */ }
+  }
+  throw new Error('Data unavailable');
+}
+function buildModel(rows) {
+  COUNTRIES = d3.groups(rows, d => d.country).map(([name, recs]) => {
+    recs.sort((a, b) => a.year - b.year);
+    return {
+      name, continent: recs[0].continent,
+      life: recs.map(r => r.lifeExp), gdp: recs.map(r => r.gdpPercap),
+      lgdp: recs.map(r => Math.log(r.gdpPercap)), pop: recs.map(r => r.pop)
+    };
+  }).filter(c => c.life.length === YEARS.length);
+  BY_NAME = new Map(COUNTRIES.map(c => [c.name, c]));
+  BASE = COUNTRIES.map(c => ({ c, life: c.life[0], gdp: c.gdp[0], pop: c.pop[0] }));
+}
+function lerpAt(arr, year) {
+  const t = (year - Y0) / 5;
+  const i = Math.max(0, Math.min(Math.floor(t), arr.length - 2));
+  return arr[i] + (arr[i + 1] - arr[i]) * (t - i);
+}
+const valuesAt = (c, year) => ({ life: lerpAt(c.life, year), gdp: Math.exp(lerpAt(c.lgdp, year)), pop: lerpAt(c.pop, year) });
+let snapCache = { year: NaN, rows: [] };
+function snapshot(year) {
+  if (snapCache.year !== year) snapCache = { year, rows: COUNTRIES.map(c => ({ c, ...valuesAt(c, year) })) };
+  return snapCache.rows;
+}
+const visible = s => snapshot(s.year).filter(d => s.continents.has(d.c.continent));
+function aggregates(rows) {
+  const pop = d3.sum(rows, d => d.pop);
+  return { pop, n: rows.length,
+           life: pop ? d3.sum(rows, d => d.life * d.pop) / pop : 0,
+           gdp: d3.median(rows, d => d.gdp) || 0 };
+}
+
+function Sidebar(root) {
+  const filters = $('#filters', root), watch = $('#watchlist', root), pinCount = $('#pinCount', root);
+  const counts = d3.rollup(COUNTRIES, v => v.length, c => c.continent);
+
+  filters.addEventListener('click', e => {
+    const b = e.target.closest('[data-cont]'); if (!b) return;
+    const next = new Set(store.get().continents);
+    if (next.has(b.dataset.cont)) { if (next.size === 1) return; next.delete(b.dataset.cont); }
+    else next.add(b.dataset.cont);
+    store.set({ continents: next });
+  });
+  filters.addEventListener('dblclick', e => {
+    const b = e.target.closest('[data-cont]');
+    if (b) store.set({ continents: new Set([b.dataset.cont]) });
+  });
+  $('#resetFilters', root).addEventListener('click', () => store.set({ continents: new Set(CONTINENTS) }));
+  watch.addEventListener('click', e => { const b = e.target.closest('[data-unpin]'); if (b) toggle('pinned', b.dataset.unpin); });
+  watch.addEventListener('mouseover', e => { const li = e.target.closest('li[data-name]'); if (li) store.set({ hover: li.dataset.name }); });
+  watch.addEventListener('mouseleave', () => store.set({ hover: null }));
+
+  const paintWatch = throttle(() => {
+    const s = store.get();
+    const names = [...s.pinned].filter(n => BY_NAME.has(n));
+    pinCount.textContent = names.length || '';
+    watch.innerHTML = names.length ? names.map(n => {
+      const v = valuesAt(BY_NAME.get(n), s.year);
+      return `<li data-name="${n}"><i></i><span class="wname">${n}</span><span class="mono">${v.life.toFixed(1)}</span><button data-unpin="${n}" aria-label="Unpin ${n}">×</button></li>`;
+    }).join('') : '<li class="empty">Click a bubble or row to pin it</li>';
+  }, 150);
+
+  return {
+    render(s, ch) {
+      if (has(ch, 'continents')) {
+        filters.innerHTML = CONTINENTS.map(c =>
+          `<button class="filter ${s.continents.has(c) ? 'on' : ''}" data-cont="${c}" style="--sw:${SHADE[c]}"><i></i>${c}<span>${counts.get(c) || 0}</span></button>`).join('');
+      }
+      if (has(ch, 'pinned') || has(ch, 'year')) paintWatch();
+    }
+  };
+}
+
+function Playback() {
+  const play = $('#play'), year = $('#year'), scrub = $('#scrub'), speeds = $('#speeds');
+  $('#ticks').innerHTML = YEARS.map(y => `<span>${y}</span>`).join('');
+  play.addEventListener('click', togglePlay);
+  $('#prev').addEventListener('click', () => step(-1));
+  $('#next').addEventListener('click', () => step(1));
+  scrub.addEventListener('input', () => store.set({ year: +scrub.value, playing: false }));
+  speeds.addEventListener('click', e => { const b = e.target.closest('[data-speed]'); if (b) store.set({ speed: +b.dataset.speed }); });
+  return {
+    render(s, ch) {
+      if (has(ch, 'playing')) { play.innerHTML = s.playing ? ICON.pause : ICON.play; play.setAttribute('aria-label', s.playing ? 'Pause' : 'Play'); }
+      if (has(ch, 'year')) {
+        year.textContent = Math.floor(s.year + 1e-6);
+        scrub.value = s.year;
+        scrub.style.setProperty('--p', ((s.year - Y0) / (Y1 - Y0) * 100).toFixed(2) + '%');
+      }
+      if (has(ch, 'speed')) speeds.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.speed === s.speed));
+    }
+  };
+}
+
+function Kpis() {
+  const el = k => $('#k-' + k);
+  const delta = (node, v, text) => { node.textContent = text + ' since 1952'; node.classList.toggle('neg', v < -1e-9); };
+  const sign = v => v < -1e-9 ? '−' : '+';
+  const paint = throttle(() => {
+    const s = store.get();
+    const now = aggregates(visible(s));
+    const then = aggregates(BASE.filter(d => s.continents.has(d.c.continent)));
+    const [pv, pu] = popParts(now.pop);
+    el('pop').innerHTML = `${pv}<small>${pu}</small>`;
+    delta(el('pop-d'), now.pop - then.pop, sign(now.pop - then.pop) + fmtPop(Math.abs(now.pop - then.pop)));
+    el('life').innerHTML = `${now.life.toFixed(1)}<small>yrs</small>`;
+    delta(el('life-d'), now.life - then.life, `${sign(now.life - then.life)}${Math.abs(now.life - then.life).toFixed(1)} yrs`);
+    el('gdp').textContent = fmtUSD(now.gdp);
+    delta(el('gdp-d'), now.gdp - then.gdp, sign(now.gdp - then.gdp) + fmtUSD(Math.abs(now.gdp - then.gdp)));
+    el('n').innerHTML = `${now.n}<small>/ ${COUNTRIES.length}</small>`;
+    el('n-d').textContent = `${s.continents.size} of ${CONTINENTS.length} continents`;
+  }, 100);
+  return { render(s, ch) { if (has(ch, 'year') || has(ch, 'continents')) paint(); } };
+}
+
+function BubbleChart(wrap) {
+  const canvas = $('canvas', wrap), ctx = canvas.getContext('2d'), tip = $('.tip', wrap);
+  const dpr = window.devicePixelRatio || 1;
+  const m = { t: 34, r: 24, b: 34, l: 48 };
+  const x = d3.scaleLog().domain([200, 120000]).clamp(true);
+  const y = d3.scaleLinear().domain([20, 85]);
+  const r = d3.scaleSqrt().domain([0, 1.35e9]);
+  let w = 0, h = 0, drawn = [], queued = false;
+
+  $('#bubbleLegend').innerHTML = CONTINENTS.map(c => `<span><i style="background:${SHADE[c]}"></i>${c}</span>`).join('') +
+    `<span><i style="background:${T.accent}"></i>Pinned</span>`;
+
+  new ResizeObserver(() => {
+    w = wrap.clientWidth; h = wrap.clientHeight;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+    x.range([m.l, w - m.r]); y.range([h - m.b, m.t]);
+    r.range([0, Math.max(18, Math.min(w, h) / 9)]);
+    request();
+  }).observe(wrap);
+
+  function request() {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; draw(store.get()); });
+  }
+
+  function draw(s) {
+    if (!w || !h) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    // Year watermark
+    ctx.font = `600 ${Math.round(Math.min(w * 0.2, h * 0.38))}px "Inter"`;
+    ctx.fillStyle = '#15171C'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText(Math.floor(s.year + 1e-6), w - m.r, h - m.b - 4);
+
+    // Grid + axes
+    ctx.lineWidth = 1; ctx.strokeStyle = T.g2; ctx.fillStyle = T.g4; ctx.font = '10px "JetBrains Mono"';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (const v of [300, 1000, 3000, 10000, 30000, 100000]) {
+      const px = Math.round(x(v)) + .5;
+      ctx.beginPath(); ctx.moveTo(px, m.t); ctx.lineTo(px, h - m.b); ctx.stroke();
+      ctx.fillText(v >= 1000 ? `$${v / 1000}k` : `$${v}`, px, h - m.b + 10);
+    }
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (let v = 20; v <= 80; v += 10) {
+      const py = Math.round(y(v)) + .5;
+      ctx.beginPath(); ctx.moveTo(m.l, py); ctx.lineTo(w - m.r, py); ctx.stroke();
+      ctx.fillText(v, m.l - 10, py);
+    }
+    ctx.textBaseline = 'bottom';
+    ctx.textAlign = 'left';  ctx.fillText('LIFE EXPECTANCY · YRS', m.l, m.t - 12);
+    ctx.textAlign = 'right'; ctx.fillText('GDP PER CAPITA · LOG SCALE →', w - m.r, m.t - 12);
+
+    // Traced paths
+    for (const n of s.traced) {
+      const c = BY_NAME.get(n);
+      if (!c || !s.continents.has(c.continent)) continue;
+      const pts = YEARS.filter(yr => yr < s.year).map(yr => valuesAt(c, yr)).concat([valuesAt(c, s.year)]);
+      ctx.beginPath();
+      pts.forEach((p, i) => i ? ctx.lineTo(x(p.gdp), y(p.life)) : ctx.moveTo(x(p.gdp), y(p.life)));
+      ctx.strokeStyle = 'rgba(255,79,0,.55)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = T.accent;
+      pts.slice(0, -1).forEach(p => { ctx.beginPath(); ctx.arc(x(p.gdp), y(p.life), 2, 0, 2 * Math.PI); ctx.fill(); });
+    }
+
+    // Bubbles (largest first so small ones stay on top)
+    const focus = s.hover;
+    drawn = visible(s).slice().sort((a, b) => b.pop - a.pop)
+      .map(d => ({ d, X: x(d.gdp), Y: y(d.life), R: Math.max(2, r(d.pop)) }));
+    for (const p of drawn) {
+      const n = p.d.c.name, pin = s.pinned.has(n), hov = n === focus;
+      ctx.globalAlpha = focus && !hov && !pin ? .18 : (pin || hov ? .95 : .55);
+      ctx.beginPath(); ctx.arc(p.X, p.Y, p.R, 0, 2 * Math.PI);
+      ctx.fillStyle = pin ? T.accent : SHADE[p.d.c.continent]; ctx.fill();
+      ctx.globalAlpha = 1; ctx.lineWidth = hov ? 1.5 : 1; ctx.strokeStyle = hov ? T.text : T.ink; ctx.stroke();
+    }
+
+    // Labels for pinned + hovered
+    ctx.font = '500 11px "JetBrains Mono"'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    for (const p of drawn) {
+      const n = p.d.c.name;
+      if (!s.pinned.has(n) && n !== focus) continue;
+      const lx = p.X + p.R + 5;
+      ctx.lineWidth = 3; ctx.strokeStyle = T.ink; ctx.strokeText(n, lx, p.Y);
+      ctx.fillStyle = T.text; ctx.fillText(n, lx, p.Y);
+    }
+  }
+
+  function hitTest(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    for (let i = drawn.length - 1; i >= 0; i--) {
+      const p = drawn[i];
+      if ((mx - p.X) ** 2 + (my - p.Y) ** 2 <= (p.R + 2) ** 2) return { p, mx, my };
+    }
+    return { p: null, mx, my };
+  }
+
+  canvas.addEventListener('mousemove', e => {
+    const { p, mx, my } = hitTest(e);
+    store.set({ hover: p ? p.d.c.name : null });
+    canvas.style.cursor = p ? 'pointer' : 'default';
+    if (!p) { tip.style.display = 'none'; return; }
+    const d = p.d, pinned = store.get().pinned.has(d.c.name);
+    tip.innerHTML = `<b>${d.c.name}</b> <span class="label" style="margin-left:6px">${d.c.continent}</span>
+      <div class="row"><span>Life exp.</span><span>${d.life.toFixed(1)} yrs</span></div>
+      <div class="row"><span>GDP / cap</span><span>${fmtUSD(d.gdp)}</span></div>
+      <div class="row"><span>Population</span><span>${fmtPop(d.pop)}</span></div>
+      <div class="hint">Click to ${pinned ? 'unpin' : 'pin'}</div>`;
+    tip.style.display = 'block';
+    tip.style.left = Math.min(mx + 16, w - 200) + 'px';
+    tip.style.top = Math.min(my + 16, h - 110) + 'px';
+  });
+  canvas.addEventListener('mouseleave', () => { store.set({ hover: null }); tip.style.display = 'none'; });
+  canvas.addEventListener('click', e => { const { p } = hitTest(e); if (p) { toggle('pinned', p.d.c.name); tip.style.display = 'none'; } });
+
+  return { render: request };
+}
+
+function TrendChart() {
+  const weighted = (list, j) => d3.sum(list, c => c.life[j] * c.pop[j]) / d3.sum(list, c => c.pop[j]);
+  const axis = { labelFontFamily:'JetBrains Mono', labelFontSize:10, labelFontColor:T.g4, lineColor:T.g2, tickColor:T.g2, gridColor:T.g2 };
+  const series = CONTINENTS.map(ct => {
+    const list = COUNTRIES.filter(c => c.continent === ct);
+    return { type:'line', name:ct, continent:ct, showInLegend:true, color:SHADE[ct], lineThickness:1.25, markerSize:0,
+             dataPoints: YEARS.map((yr, j) => ({ x: yr, y: +weighted(list, j).toFixed(1) })) };
+  });
+  series.push({ type:'line', name:'World', showInLegend:true, color:T.accent, lineThickness:2, markerSize:0,
+                dataPoints: YEARS.map((yr, j) => ({ x: yr, y: +weighted(COUNTRIES, j).toFixed(1) })) });
+
+  const chart = new CanvasJS.Chart('trend', {
+    backgroundColor:'transparent', animationEnabled:false,
+    axisX: { ...axis, minimum:1950, maximum:2009, interval:10, valueFormatString:'####', gridThickness:0,
+             stripLines:[{ value:Y0, color:T.accent, thickness:1, showOnTop:true }] },
+    axisY: { ...axis, minimum:35, maximum:80, interval:15, lineThickness:0, tickLength:0, gridThickness:1 },
+    toolTip: { shared:true, backgroundColor:T.ink, borderColor:T.g3, fontColor:T.text, fontFamily:'JetBrains Mono', fontStyle:'normal', fontSize:11, cornerRadius:0 },
+    legend: { fontFamily:'JetBrains Mono', fontSize:10, fontColor:T.g5, fontWeight:'normal', horizontalAlign:'left', verticalAlign:'bottom' },
+    data: series
+  });
+
+  const paint = throttle(() => {
+    const s = store.get();
+    chart.options.axisX.stripLines[0].value = s.year;
+    chart.options.data.forEach(d => { if (d.continent) d.visible = s.continents.has(d.continent); });
+    chart.render();
+  }, 100);
+  return { render(s, ch) { if (has(ch, 'year') || has(ch, 'continents')) paint(); } };
+}
+
+function MapChart(el) {
+  const GEO = { "Congo, Dem. Rep.":'CD', "Congo, Rep.":'CG', "Cote d'Ivoire":'CI', "Korea, Dem. Rep.":'KP', "Korea, Rep.":'KR',
+    "Yemen, Rep.":'YE', "Hong Kong, China":'HK', "Slovak Republic":'SK', "West Bank and Gaza":'PS', "Reunion":'RE',
+    "Sao Tome and Principe":'ST', "Swaziland":'SZ', "Czech Republic":'CZ', "Gambia":'GM', "Taiwan":'TW',
+    "United States":'US', "United Kingdom":'GB', "Iran":'IR', "Syria":'SY', "Libya":'LY', "Bosnia and Herzegovina":'BA' };
+  const OPTIONS = {
+    backgroundColor:'transparent', datalessRegionColor:T.g1, defaultColor:T.g2, keepAspectRatio:true,
+    colorAxis:{ minValue:30, maxValue:82, colors:[T.g2, T.text] },
+    legend:{ textStyle:{ color:T.g4, fontName:'JetBrains Mono', fontSize:10 }, numberFormat:'#' },
+    tooltip:{ textStyle:{ fontName:'JetBrains Mono', fontSize:12 } }
+  };
+  let chart = null, rows = [], lastKey = '';
+  const label = $('#mapYear');
+
+  function draw(force) {
+    if (!chart) return;
+    const s = store.get();
+    const idx = Math.round((s.year - Y0) / 5);
+    const key = idx + '|' + [...s.continents].sort().join();
+    if (!force && key === lastKey) return;
+    lastKey = key;
+    rows = COUNTRIES.filter(c => s.continents.has(c.continent));
+    const data = new google.visualization.DataTable();
+    data.addColumn('string', 'Country');
+    data.addColumn('number', 'Life expectancy');
+    data.addRows(rows.map(c => [GEO[c.name] ? { v: GEO[c.name], f: c.name } : c.name, +c.life[idx].toFixed(1)]));
+    chart.draw(data, OPTIONS);
+    label.textContent = YEARS[idx];
+  }
+
+  return {
+    init() {
+      chart = new google.visualization.GeoChart(el);
+      google.visualization.events.addListener(chart, 'select', () => {
+        const sel = chart.getSelection()[0];
+        if (sel && sel.row != null) toggle('pinned', rows[sel.row].name);
+        chart.setSelection([]);
+      });
+      draw(true);
+      window.addEventListener('resize', debounce(() => draw(true), 200));
+    },
+    render() { draw(false); }
+  };
+}
+
+function CountryTable(root) {
+  const thead = $('#thead', root), tbody = $('#tbody', root), search = $('#search', root), count = $('#rowCount', root);
+  const COLS = [
+    { key:'rank', label:'#', num:true }, { key:'name', label:'Country', sort:true }, { key:'continent', label:'Continent', sort:true },
+    { key:'life', label:'Life exp.', num:true, sort:true }, { key:'delta', label:'Δ 1952', num:true, sort:true },
+    { key:'gdp', label:'GDP / cap', num:true, sort:true }, { key:'pop', label:'Population', num:true, sort:true },
+    { key:'trend', label:'1952 → 2007' }, { key:'status', label:'Status' }, { key:'actions', label:'' }
+  ];
+
+  thead.addEventListener('click', e => {
+    const th = e.target.closest('th[data-sort]'); if (!th) return;
+    const k = th.dataset.sort, cur = store.get().sort;
+    store.set({ sort: { key: k, dir: cur.key === k ? -cur.dir : (k === 'name' || k === 'continent' ? 1 : -1) } });
+  });
+  search.addEventListener('input', () => store.set({ query: search.value.trim().toLowerCase() }));
+  tbody.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) toggle(b.dataset.act, b.closest('tr').dataset.name); });
+  tbody.addEventListener('mouseover', e => { const tr = e.target.closest('tr[data-name]'); if (tr) store.set({ hover: tr.dataset.name }); });
+  tbody.addEventListener('mouseleave', () => store.set({ hover: null }));
+
+  function spark(c, year) {
+    const W = 72, H = 18, sx = i => i / (YEARS.length - 1) * W, sy = v => H - (v - 20) / 65 * H;
+    const pts = c.life.map((v, i) => `${sx(i).toFixed(1)},${sy(v).toFixed(1)}`).join(' ');
+    const cx = ((year - Y0) / (Y1 - Y0) * W).toFixed(1), cy = sy(lerpAt(c.life, year)).toFixed(1);
+    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><polyline points="${pts}" fill="none" stroke="${T.g4}" stroke-width="1"/><circle cx="${cx}" cy="${cy}" r="2" fill="${T.accent}"/></svg>`;
+  }
+  const status = v => v >= 70 ? 'High' : v >= 55 ? 'Mid' : 'Low';
+
+  function paintHead(s) {
+    thead.innerHTML = COLS.map(c => {
+      const active = s.sort.key === c.key;
+      return `<th class="${c.num ? 'num' : ''} ${active ? 'sorted' : ''}" ${c.sort ? `data-sort="${c.key}"` : ''}>${c.label}${active ? (s.sort.dir > 0 ? ' ↑' : ' ↓') : ''}</th>`;
+    }).join('');
+  }
+
+  const paintBody = throttle(() => {
+    const s = store.get();
+    const rows = visible(s)
+      .filter(d => !s.query || d.c.name.toLowerCase().includes(s.query))
+      .map(d => ({ ...d, name: d.c.name, continent: d.c.continent, delta: d.life - d.c.life[0] }));
+    rows.sort((a, b) => s.sort.dir * d3.ascending(a[s.sort.key], b[s.sort.key]));
+    count.textContent = `${rows.length} shown`;
+    tbody.innerHTML = rows.map((d, i) => {
+      const n = d.name, pin = s.pinned.has(n), tr = s.traced.has(n), st = status(d.life);
+      return `<tr data-name="${n}" class="${pin ? 'pinned' : ''} ${s.hover === n ? 'hl' : ''}">
+        <td class="num dim">${i + 1}</td>
+        <td>${n}</td>
+        <td class="dim">${d.continent}</td>
+        <td class="num">${d.life.toFixed(1)}</td>
+        <td class="num ${d.delta < 0 ? 'neg' : ''}">${d.delta >= 0 ? '+' : '−'}${Math.abs(d.delta).toFixed(1)}</td>
+        <td class="num">${fmtUSD(d.gdp)}</td>
+        <td class="num">${fmtPop(d.pop)}</td>
+        <td>${spark(d.c, s.year)}</td>
+        <td><span class="badge ${st.toLowerCase()}">${st}</span></td>
+        <td><div class="actions">
+          <button class="act ${pin ? 'on' : ''}" data-act="pinned">${pin ? 'Unpin' : 'Pin'}</button>
+          <button class="act ${tr ? 'on' : ''}" data-act="traced">Trace</button>
+        </div></td></tr>`;
+    }).join('') || `<tr><td colspan="${COLS.length}" class="empty">No countries match “${escapeHTML(s.query)}”</td></tr>`;
+  }, 120);
+
+  function paintHover(s) {
+    tbody.querySelector('tr.hl')?.classList.remove('hl');
+    if (s.hover) tbody.querySelector(`tr[data-name="${CSS.escape(s.hover)}"]`)?.classList.add('hl');
+  }
+
+  return {
+    render(s, ch) {
+      if (has(ch, 'sort')) paintHead(s);
+      if (['year', 'continents', 'pinned', 'traced', 'query', 'sort'].some(k => has(ch, k))) paintBody();
+      if (has(ch, 'hover')) paintHover(s);
+    }
+  };
+}
+
+function Engine() {
+  let running = false, last = null;
+  function tick(ts) {
+    const s = store.get();
+    if (!s.playing) { running = false; last = null; return; }
+    if (last !== null) {
+      const next = s.year + ((ts - last) / 1000) * 3 * s.speed;   // 3 years per second at 1×
+      if (next >= Y1) { running = false; last = null; store.set({ year: Y1, playing: false }); return; }
+      store.set({ year: next });
+    }
+    last = ts;
+    requestAnimationFrame(tick);
+  }
+  return {
+    render(s, ch) {
+      if (has(ch, 'playing') && s.playing && !running) { running = true; last = null; requestAnimationFrame(tick); }
+    }
+  };
+}
+
+const gReady = google.charts.load('current', { packages: ['geochart'] });
+
+(async function boot() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch (e) {}
+  store = createStore({
+    year: Y0, playing: false, speed: 1,
+    continents: new Set(CONTINENTS),
+    pinned: new Set(saved.pinned || ['China', 'India', 'United States', 'Nigeria']),
+    traced: new Set(saved.traced || ['China']),
+    hover: null, query: '', sort: { key: 'life', dir: -1 }
+  });
+
+  try {
+    const [rows] = await Promise.all([loadData(), document.fonts.ready]);
+    buildModel(rows);
+  } catch (e) {
+    $('#loading').textContent = 'Could not load data. Check your connection and reload.';
+    return;
+  }
+  $('#loading').remove();
+
+  const map = MapChart($('#geo'));
+  const components = [Sidebar($('#sidebar')), Playback(), Kpis(), BubbleChart($('#bubble')), TrendChart(), CountryTable($('#countries')), map, Engine()];
+  store.subscribe((s, ch) => components.forEach(c => c.render(s, ch)));
+  store.subscribe((s, ch) => {
+    if (!has(ch, 'pinned') && !has(ch, 'traced')) return;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ pinned: [...s.pinned], traced: [...s.traced] })); } catch (e) {}
+  });
+  components.forEach(c => c.render(store.get(), ALL));
+  gReady.then(() => map.init()).catch(() => { $('#geo').innerHTML = '<div class="loading label">Map unavailable</div>'; });
+
+  document.addEventListener('keydown', e => {
+    if (e.target.matches('input')) return;
+    if (e.code === 'Space' && !e.target.closest('button')) { e.preventDefault(); togglePlay(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+  });
+
+  const links = [...document.querySelectorAll('.nav a')];
+  const updateNav = () => {
+    let active = links[0];
+    for (const a of links) { const sec = $(a.getAttribute('href')); if (sec && sec.getBoundingClientRect().top <= 160) active = a; }
+    links.forEach(a => a.classList.toggle('active', a === active));
+  };
+  $('#main').addEventListener('scroll', updateNav, { passive: true });
+  window.addEventListener('scroll', updateNav, { passive: true });
+  updateNav();
+})();
+</script>
+</body>
+</html>
