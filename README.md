@@ -2,7 +2,7 @@
 
 An animated dashboard showing how 142 countries got richer and lived longer between 1952 and 2007, inspired by Hans Rosling's famous Gapminder chart.
 
-**[View the live dashboard →](https://yourusername.github.io/wealth-health-dashboard/)**
+**[View the live dashboard →](https://kartik6049.github.io/wealth_health_dashboard/)**
 
 
 ## What it shows
